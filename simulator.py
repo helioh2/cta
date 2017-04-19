@@ -18,12 +18,21 @@ GEN_CAR_ID = gen_car_id()
 GEN_STREET_ID = (i for i in range(COUNT_STREETS))
       
 
-DIRECTIONS = ["H", "V"]
+# DIRECTIONS = ["H", "V"]
+# DIR_HOR = 0
+# DIR_VER = 1
+# SENSES = ["->", "<-"]
+# L_TO_R = 0
+# R_TO_L = 1
+
+SENSES = [(0,1),(0,-1),(1,0),(-1,0)]
+SENSES_NAMES = ["RIGHT", "LEFT", "DOWN", "UP"]
+
+DIRECTIONS = [(0,1), (1,0)]
+DIRECTIONS_NAMES = ["HORIZONTAL", "VERTICAL"]
 DIR_HOR = 0
 DIR_VER = 1
-SENSES = ["->", "<-"]
-L_TO_R = 0
-R_TO_L = 1
+
 
 
 class Simulator:
@@ -52,14 +61,14 @@ class Simulator:
                 v_block = v_street.blocks[h]
                 v_block_next = v_street.blocks[h+1]
                 
-                if h_street.sense == L_TO_R:
+                if h_street.sense == (0,1):
                     h_entry_block = h_block
                     h_exit_block = h_block_next
                 else:
                     h_entry_block = h_block_next
                     h_exit_block = h_block
 
-                if v_street.sense == L_TO_R:
+                if v_street.sense == (1,0):
                     v_entry_block = v_block
                     v_exit_block = v_block_next
                 else:
@@ -129,7 +138,7 @@ class Car:
         self.lane_id = None
         self.in_intersection = False
         self.turning = False
-        self.pos_intersection = None,None
+        self.p_crossing = None,None
 
     
     def move_forward(self):
@@ -139,39 +148,26 @@ class Car:
         #else do nothing
     
     def move_forward_into_intersection(self):
+
+        if self.street.sense == (0,1):
+            self.p_crossing = self.lane_id, 0
+            
+        elif self.street.sense == (0,-1):
+            self.p_crossing = self.lane_id, LANES_COUNT-1
+            
+        elif self.street.sense == (1,0):
+            self.p_crossing = 0, self.lane_id
+        
+        elif self.street.sense == (-1,0):
+            self.p_crossing = LANES_COUNT-1, self.lane_id
+        
         intersection = self.block.next_intersection
-        if self.street.direction == DIR_HOR and self.street.sense == L_TO_R:
-            if intersection.crossroad[self.lane_id][0] == None:                
-                intersection.crossroad[self.lane_id][0] = self 
-                self.pos_intersection = self.lane_id, 0
+        if intersection.crossroad[self.p_crossing[0]][self.p_crossing[1]] == None:                
+                intersection.crossroad[self.p_crossing[0]][self.p_crossing[1]] = self 
                 self.lane[-1] = None           
                 self.in_intersection = True
                 return True
-        elif self.street.direction == DIR_HOR and self.street.sense == R_TO_L:
-            if intersection.crossroad[self.lane_id][LANES_COUNT-1] == None:                
-                intersection.crossroad[self.lane_id][LANES_COUNT-1] = self 
-                self.pos_intersection = self.lane_id, LANES_COUNT-1
-                self.lane[-1] = None           
-                self.in_intersection = True
-                return True
-            
-        elif self.street.direction == DIR_VER and self.street.sense == L_TO_R:    
-            if intersection.crossroad[0][self.lane_id] == None:  
-                intersection.crossroad[0][self.lane_id] = self 
-                self.pos_intersection = 0, self.lane_id
-                self.lane[-1] = None           
-                self.in_intersection = True
-                return True
-            
-        elif self.street.direction == DIR_VER and self.street.sense == R_TO_L:
-            if intersection.crossroad[LANES_COUNT-1][self.lane_id] == None:  
-                intersection.crossroad[LANES_COUNT-1][self.lane_id] = self 
-                self.pos_intersection = LANES_COUNT-1, self.lane_id
-                self.lane[-1] = None           
-                self.in_intersection = True
-                return True  
-        return False
-                
+      
     
     def turn_into_intersection(self):
         if self.move_forward_into_intersection():
@@ -179,94 +175,91 @@ class Car:
         
     
     def move_forward_in_intersection(self):
-        #checar se andou até o final, senão andar
-        intersection = self.block.next_intersection
-        if self.street.direction == DIR_HOR and self.street.sense == L_TO_R:
-            
-            if self.pos_intersection == (self.lane_id, LANES_COUNT-1):                  
-                next_block = intersection.h_exit_block
-                self.block = next_block
-                self.block.add_car(self,self.lane_id)
-                intersection.crossroad[self.lane_id][LANES_COUNT-1] = None
-            else:
-                intersection.crossroad[self.lane_id][self.pos_intersection[1]] = None
-                self.pos_intersection = self.lane_id, self.pos_intersection[1] + 1
-                intersection.crossroad[self.lane_id][self.pos_intersection[1]] = self
-                
-                
-        elif self.street.direction == DIR_HOR and self.street.sense == R_TO_L:
-            
-            if self.pos_intersection == (self.lane_id, 0):                  
-                next_block = intersection.h_exit_block
-                self.block = next_block
-                self.block.add_car(self,self.lane_id)
-                intersection.crossroad[self.lane_id][0] = None
-            else:
-                intersection.crossroad[self.lane_id][self.pos_intersection[1]] = None
-                self.pos_intersection = self.lane_id, self.pos_intersection[1] - 1
-                intersection.crossroad[self.lane_id][self.pos_intersection[1]] = self
-                
-        elif self.street.direction == DIR_VER and self.street.sense == L_TO_R:   
-            
-            if self.pos_intersection == (LANES_COUNT-1, self.lane_id):
-                  
-                next_block = intersection.v_exit_block
-                self.block = next_block
-                self.block.add_car(self,self.lane_id)
-                intersection.crossroad[LANES_COUNT-1][self.lane_id] = None
-            else:
-                intersection.crossroad[self.pos_intersection[1]][self.lane_id] = None
-                self.pos_intersection = self.pos_intersection[1] + 1, self.lane_id
-                intersection.crossroad[self.pos_intersection[1]][self.lane_id] = self
-                
-        elif self.street.direction == DIR_VER and self.street.sense == R_TO_L: 
-            if self.pos_intersection == (0, self.lane_id):
-                  
-                next_block = intersection.v_exit_block
-                self.block = next_block
-                self.block.add_car(self,self.lane_id)
-                intersection.crossroad[0][self.lane_id] = None
-            else:
-                intersection.crossroad[self.pos_intersection[1]][self.lane_id] = None
-                self.pos_intersection = self.pos_intersection[1] - 1, self.lane_id
-                intersection.crossroad[self.pos_intersection[1]][self.lane_id] = self   
+        
+        intersection = self.block.next_intersection     
+        p_crossing_prev = self.p_crossing
+        self.p_crossing += self.street.sense
+        if (intersection.out_of_crossing(self.p_crossing)):
+            next_block = intersection.h_exit_block  #usar uma indexacao das entries e exits para essa parte
+            self.block = next_block
+            self.block.add_car(self,self.lane_id)
+            self.in_intersection = False
+        else:
+            intersection.crossroad[self.p_crossing[0]][self.p_crossing[1]] = self      
+        
+        intersection.crossroad[p_crossing_prev[0]][p_crossing_prev[1]] = None
+        #verificar possibilidade de colisao
+        
+        
+     
         
     def turn_in_intersection(self):
         #checar se andou até o final, senão andar
         intersection = self.block.next_intersection
         if self.street.direction == DIR_HOR and self.street.sense == L_TO_R:
-            if self.pos_intersection[1] < self.lane_id:
-                intersection.crossroad[self.pos_intersection[0]][self.pos_intersection[1]] = None
-                self.pos_intersection = self.lane_id, self.lane_id+1
-                intersection.crossroad[self.pos_intersection[0]][self.pos_intersection[1]] = self
+            if self.p_crossing[1] < self.lane_id:
+                intersection.crossroad[self.p_crossing[0]][self.p_crossing[1]] = None
+                self.p_crossing = self.lane_id, self.lane_id+1
+                intersection.crossroad[self.p_crossing[0]][self.p_crossing[1]] = self
                 
-            elif self.pos_intersection != (LANES_COUNT-1, self.lane_id):
-                intersection.crossroad[self.pos_intersection[0]][self.pos_intersection[1]] = None
-                self.pos_intersection = self.lane_id+1, self.lane_id
-                intersection.crossroad[self.pos_intersection[0]][self.pos_intersection[1]] = self
+            elif self.p_crossing != (LANES_COUNT-1, self.lane_id):
+                intersection.crossroad[self.p_crossing[0]][self.p_crossing[1]] = None
+                self.p_crossing = self.lane_id+1, self.lane_id
+                intersection.crossroad[self.p_crossing[0]][self.p_crossing[1]] = self
             else:
                 next_block = intersection.v_exit_block
                 self.block = next_block
                 self.block.add_car(self,self.lane_id)
-                intersection.crossroad[self.pos_intersection[0]][self.pos_intersection[1]] = None
+                intersection.crossroad[self.p_crossing[0]][self.p_crossing[1]] = None
                 
-        if self.street.direction == DIR_HOR and self.street.sense == R_TO_L:
-            if self.pos_intersection[1] > self.lane_id:
-                intersection.crossroad[self.pos_intersection[0]][self.pos_intersection[1]] = None
-                self.pos_intersection = self.lane_id, self.lane_id-1
-                intersection.crossroad[self.pos_intersection[0]][self.pos_intersection[1]] = self
+        elif self.street.direction == DIR_HOR and self.street.sense == R_TO_L:
+            if self.p_crossing[1] > self.lane_id:
+                intersection.crossroad[self.p_crossing[0]][self.p_crossing[1]] = None
+                self.p_crossing = self.lane_id, self.lane_id-1
+                intersection.crossroad[self.p_crossing[0]][self.p_crossing[1]] = self
                 
-            elif self.pos_intersection != (LANES_COUNT-1, self.lane_id):
-                intersection.crossroad[self.pos_intersection[0]][self.pos_intersection[1]] = None
-                self.pos_intersection = self.lane_id+1, self.lane_id
-                intersection.crossroad[self.pos_intersection[0]][self.pos_intersection[1]] = self
+            elif self.p_crossing != (LANES_COUNT-1, self.lane_id):
+                intersection.crossroad[self.p_crossing[0]][self.p_crossing[1]] = None
+                self.p_crossing = self.lane_id+1, self.lane_id
+                intersection.crossroad[self.p_crossing[0]][self.p_crossing[1]] = self
             else:
                 next_block = intersection.v_exit_block
                 self.block = next_block
                 self.block.add_car(self,self.lane_id)
-                intersection.crossroad[self.pos_intersection[0]][self.pos_intersection[1]] = None        
+                intersection.crossroad[self.p_crossing[0]][self.p_crossing[1]] = None        
                 
-                 
+        elif self.street.direction == DIR_VER and self.street.sense == L_TO_R:
+            if self.p_crossing[0] < self.lane_id:
+                intersection.crossroad[self.p_crossing[0]][self.p_crossing[1]] = None
+                self.p_crossing = self.lane_id+1, self.lane_id
+                intersection.crossroad[self.p_crossing[0]][self.p_crossing[1]] = self
+                
+            elif self.p_crossing != (self.lane_id, LANES_COUNT-1):
+                intersection.crossroad[self.p_crossing[0]][self.p_crossing[1]] = None
+                self.p_crossing = self.lane_id, self.lane_id+1
+                intersection.crossroad[self.p_crossing[0]][self.p_crossing[1]] = self
+            else:
+                next_block = intersection.v_exit_block
+                self.block = next_block
+                self.block.add_car(self,self.lane_id)
+                intersection.crossroad[self.p_crossing[0]][self.p_crossing[1]] = None
+        
+        elif self.street.direction == DIR_VER and self.street.sense == R_TO_L:
+            if self.p_crossing[0] > self.lane_id:
+                intersection.crossroad[self.p_crossing[0]][self.p_crossing[1]] = None
+                self.p_crossing = self.lane_id - 1, self.lane_id
+                intersection.crossroad[self.p_crossing[0]][self.p_crossing[1]] = self
+                
+            elif self.p_crossing != (self.lane_id, LANES_COUNT-1):
+                intersection.crossroad[self.p_crossing[0]][self.p_crossing[1]] = None
+                self.p_crossing = self.lane_id, self.lane_id-1
+                intersection.crossroad[self.p_crossing[0]][self.p_crossing[1]] = self
+            else:
+                next_block = intersection.v_exit_block
+                self.block = next_block
+                self.block.add_car(self,self.lane_id)
+                intersection.crossroad[self.p_crossing[0]][self.p_crossing[1]] = None        
+                               
         
                 intersection = self.block.next_intersection
                 if self.block == intersection.h_entry_block:
@@ -343,8 +336,22 @@ class Street:
         self.count_blocks = count_blocks
         self.gen_block_id = (i for i in range(self.count_blocks))
         self.__id = next(GEN_STREET_ID)
+#         self.direction = direction
         self.direction = direction
-        self.sense = self.__id % 2
+        direc = DIRECTIONS[self.direction]
+        
+        def calcSense(x,idd):
+            '''
+            Examples: direc = (0,1) and id = 0 -> sense = (0,1)
+                     direc = (0,1) and id = 1 -> sense = (0,-1)
+                     direc = (1,0) and id = 2 -> sense = (1,0)
+                     direc = (1,0) and id = 3 -> sense = (-1,0)
+            '''
+            if x == 0: return 0
+            elif idd%2 == 0: return 1
+            else: return -1
+        
+        self.sense = (calcSense(direc[0], self.__id), calcSense(direc[1], self.__id))
         
         self.blocks = [Block(self, BLOCK_LENGTH, LANES_COUNT) for _ in range(count_blocks)]
         self.entry_block = self.blocks[0] if self.sense == L_TO_R else self.blocks[-1]
