@@ -105,10 +105,18 @@ class Intersection:
         self.v_entry_block = v_entry_block       
         self.v_exit_block = v_exit_block
         
+        self.exit_blocks = [h_exit_block, v_exit_block]
+        
         self.h_entry_block.next_intersection = self
         self.v_entry_block.next_intersection = self
         self.h_exit_block.previous_intersection = self
         self.v_exit_block.previous_intersection = self
+        
+        self.h_street = h_entry_block.street
+        self.v_street - v_entry_block.street
+        
+        self.crossing = [[None]*self.h_street.count_lanes \
+                          for _ in range(self.v_street.count_lanes)]
         
         self.__id = (h_entry_block.street.id, v_entry_block.street.id)
         
@@ -122,6 +130,11 @@ class Intersection:
     
     def __str__(self):
         return "|I"+str(self.id)+"I|"
+    
+    def out_of_crossing(self, pos):
+        return pos[1] >= self.h_street.count_lanes or pos[0] >= self.v_street.count_lanes \
+            or pos[1] < 0 or pos[0] < 0
+        
     
     
 
@@ -153,20 +166,23 @@ class Car:
             self.p_crossing = self.lane_id, 0
             
         elif self.street.sense == (0,-1):
-            self.p_crossing = self.lane_id, LANES_COUNT-1
+            self.p_crossing = self.lane_id, self.street.count_lanes - 1
             
         elif self.street.sense == (1,0):
             self.p_crossing = 0, self.lane_id
         
         elif self.street.sense == (-1,0):
-            self.p_crossing = LANES_COUNT-1, self.lane_id
+            self.p_crossing = self.street.count_lanes - 1, self.lane_id
         
         intersection = self.block.next_intersection
         if intersection.crossroad[self.p_crossing[0]][self.p_crossing[1]] == None:                
-                intersection.crossroad[self.p_crossing[0]][self.p_crossing[1]] = self 
-                self.lane[-1] = None           
-                self.in_intersection = True
-                return True
+            intersection.crossroad[self.p_crossing[0]][self.p_crossing[1]] = self 
+            self.lane[-1] = None           
+            self.in_intersection = True
+            return True
+        
+        return False
+            
       
     
     def turn_into_intersection(self):
@@ -180,7 +196,7 @@ class Car:
         p_crossing_prev = self.p_crossing
         self.p_crossing += self.street.sense
         if (intersection.out_of_crossing(self.p_crossing)):
-            next_block = intersection.h_exit_block  #usar uma indexacao das entries e exits para essa parte
+            next_block = intersection.exit_blocks[self.street.direction]
             self.block = next_block
             self.block.add_car(self,self.lane_id)
             self.in_intersection = False
@@ -196,6 +212,8 @@ class Car:
     def turn_in_intersection(self):
         #checar se andou até o final, senão andar
         intersection = self.block.next_intersection
+        
+        '''
         if self.street.direction == DIR_HOR and self.street.sense == L_TO_R:
             if self.p_crossing[1] < self.lane_id:
                 intersection.crossroad[self.p_crossing[0]][self.p_crossing[1]] = None
@@ -268,14 +286,14 @@ class Car:
                     next_block = intersection.h_exit_block
                 self.next_block.add_car(self)
         
-        
+        '''
         
     def move(self):
         if self.is_leaving_block():
             intersection = self.block.next_intersection
             if intersection != None:
                 if not intersection.closed():
-                    if random() <= TURN_RATE:
+                    if random() <= TURN_RATE and intersection.is_possible_to_turn(self):
                         self.turn_into_intersection()
                     else:
                         self.move_forward_into_intersection()
@@ -331,9 +349,10 @@ class Block:
 
 class Street:
     
-    def __init__(self, count_blocks, direction):
+    def __init__(self, count_blocks, direction, count_lanes):
         
         self.count_blocks = count_blocks
+        self.count_lanes = count_lanes
         self.gen_block_id = (i for i in range(self.count_blocks))
         self.__id = next(GEN_STREET_ID)
 #         self.direction = direction
@@ -353,9 +372,11 @@ class Street:
         
         self.sense = (calcSense(direc[0], self.__id), calcSense(direc[1], self.__id))
         
-        self.blocks = [Block(self, BLOCK_LENGTH, LANES_COUNT) for _ in range(count_blocks)]
-        self.entry_block = self.blocks[0] if self.sense == L_TO_R else self.blocks[-1]
-        self.exit_block = self.blocks[-1] if self.sense == L_TO_R else self.blocks[0]
+        self.blocks = [Block(self, BLOCK_LENGTH, count_lanes) for _ in range(count_blocks)]
+        self.entry_block = self.blocks[0] \
+                        if self.sense == (1,0) or self.sense == (0,1)  else self.blocks[-1]
+        self.exit_block = self.blocks[-1] \
+                        if self.sense == (-1,0) or self.sense == (0,-1) else self.blocks[0]
 
     @property
     def id(self):
