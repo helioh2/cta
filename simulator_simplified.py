@@ -118,6 +118,8 @@ class Simulator:
         self.gen_car_id = gen_car_id()
         self.gen_street_id = (i for i in range(COUNT_STREETS))
 
+        self.count_cars = 0
+
         self.timer = 0
         self.logger = Logger(LOGNAME)
 
@@ -174,27 +176,33 @@ class Simulator:
 
         self.logger.log_clock()
 
-        def flatten(l):
-            return [item for sublist in l for item in sublist]
-
-        moved = []
         for intersection in self.intersections:
             intersection.tick()
-            crossing = [intersection.crossing[i][j] for i in range(1) for j in range(1)]
 
-            for i in range(0,len(crossing)):
-                print(i)
-                car = crossing[i]
-                if car is not None:
-                    car.move()
+        try_later = []
+        moved = []
+
+        for intersection in self.intersections:
+            car = intersection.crossing
+            if car is not None and car not in moved:
+                if not car.move():
+                    try_later.append(car)
+                else:
                     moved.append(car)
 
-        for street in self.horizontal_streets + self.vertical_streets:
+        for street in list(reversed(self.horizontal_streets)) + list(reversed(self.vertical_streets)):
             for block in street.blocks:
                 for lane in block.lanes:
                     for car in reversed(lane):
                         if car is not None and car not in moved:
-                            car.move()
+                            if not car.move():
+                                try_later.append(car)
+
+        for car in try_later:
+            car.move()
+
+
+        for street in self.horizontal_streets + self.vertical_streets:
             if self.timer % 10 == 0:
                 street.new_car(street.entry_block.first_lane_available())
 
@@ -257,8 +265,7 @@ class Intersection:
 
         self.simulator = self.h_street.simulator
 
-        self.crossing = [[None] * self.v_street.count_lanes \
-                         for _ in range(self.h_street.count_lanes)]
+        self.crossing = None
 
         self.__id = (h_entry_block.street.id, v_entry_block.street.id)
 
@@ -269,33 +276,8 @@ class Intersection:
         return self.__id
 
     def __str__(self):
-        return "|I" + str(self.id) + "I|"
+        return "|I" + str(self.crossing) + "I|"
 
-    def out_of_crossing(self, pos):
-        return pos[1] >= self.h_street.count_lanes or pos[0] >= self.v_street.count_lanes \
-               or pos[1] < 0 or pos[0] < 0
-
-    def corner(self, street1, street2):
-        senses_sum = [sum(x) for x in zip(street1.sense, street2.sense)]
-        if street1.direction == DIR_HOR:
-            if sum(senses_sum) == 0:
-                return 0
-            else:
-                return street1.count_lanes - 1
-        else:
-            if sum(senses_sum) == 0:
-                street1.count_lanes - 1
-            else:
-                return 0
-
-    def is_possible_to_turn(self, car):
-        current_street = car.street
-        if current_street.direction == DIR_HOR:
-            crossing_street = self.v_street
-        else:
-            crossing_street = self.h_street
-
-        return car.lane_id == self.corner(current_street, crossing_street)
 
     def crossing_block_and_street(self, street):
         if self.entry_blocks[0].street == street:
@@ -341,25 +323,16 @@ class Car:
             self.lane[i], self.lane[i + 1] = self.lane[i + 1], self.lane[i]
             self.simulator.logger.log_move_car(self)
             # else do nothing
-        return True
+            return True
+        return False
 
     def move_forward_into_intersection(self, turn=False):
 
-        if self.street.sense == (0, 1):
-            self.p_crossing = self.lane_id, 0
-
-        elif self.street.sense == (0, -1):
-            self.p_crossing = self.lane_id, self.street.count_lanes - 1
-
-        elif self.street.sense == (1, 0):
-            self.p_crossing = 0, self.lane_id
-
-        elif self.street.sense == (-1, 0):
-            self.p_crossing = self.street.count_lanes - 1, self.lane_id
-
         intersection = self.block.next_intersection
-        # if intersection.crossing[self.p_crossing[0]][self.p_crossing[1]] is None:
-        intersection.crossing[self.p_crossing[0]][self.p_crossing[1]] = self
+        if intersection.crossing is not None:
+            return False
+
+        intersection.crossing = self
         self.lane[-1] = None
         self.in_intersection = True
 
@@ -375,54 +348,42 @@ class Car:
 
         # return False
 
-    def move_forward_in_intersection(self, turn=False):
+    def move_forward_in_intersection(self):
 
         intersection = self.block.next_intersection
-        p_crossing_prev = self.p_crossing
-        self.p_crossing = [sum(x) for x in zip(self.p_crossing, self.street.sense)]
-        if intersection.out_of_crossing(self.p_crossing):
-            next_block = intersection.exit_blocks[self.street.direction]
+        next_block = intersection.exit_blocks[self.street.direction]
+        # try:
+        #     self.block.add_car(self, 0)
+        # except FullLaneException as e:
+        #     print(e)
+        if next_block.add_car(self,0):
             self.block = next_block
-            try:
-                self.block.add_car(self, self.lane_id)
-            except FullLaneException as e:
-                print(e)
             self.in_intersection = False
+            intersection.crossing = None
+            self.simulator.logger.log_move_car(self)
+            return True
         else:
-            intersection.crossing[self.p_crossing[0]][self.p_crossing[1]] = self
-
-        intersection.crossing[p_crossing_prev[0]][p_crossing_prev[1]] = None
-        self.simulator.logger.log_move_car(self)
+            return False
 
 
         # verificar possibilidade de colisao
 
-    # def turn_in_intersection(self):
-    #
-    #
-    #
-    #
-    #     # self.in_intersection = False
-    #     # self.turning = False
-    #
-    #     # self.move_forward_in_intersection()
-    #     # verificar possibilidade de colisão
 
     def move(self):
-        if self.is_leaving_block():
+        if self.is_leaving_block() and not self.in_intersection:
             intersection = self.block.next_intersection
             if intersection is not None:
                 if not intersection.closed(self):
                     if random() <= TURN_RATE:  # and intersection.is_possible_to_turn(self):
-                        self.move_forward_into_intersection(True)
+                        return self.move_forward_into_intersection(True)
                     else:
-                        self.move_forward_into_intersection()
+                        return self.move_forward_into_intersection()
                         # else do nothing
+                else: return True
             else:
                 self.block.remove_car(self)
                 return True
-        # elif self.turning and self.in_intersection:
-        #     self.turn_in_intersection()
+
         elif self.in_intersection:
             return self.move_forward_in_intersection()
         else:
@@ -452,18 +413,18 @@ class Block:
 
     def add_car(self, car, lane_id):
         if lane_id is None or self.lanes[lane_id][0] != None:
-            raise FullLaneException("_lane " + str(lane_id) + " is full.")
+            # raise FullLaneException("_lane " + str(lane_id) + " is full.")
+            return False
         self.lanes[lane_id][0] = car
         car.block = self
         car.street = self.street
         car.lane = self.lanes[lane_id]
         car.lane_id = lane_id
+        self.street.simulator.count_cars += 1
+        return True
 
     def first_lane_available(self):
-        for i in range(len(self.lanes)):
-            if self.lanes[i][0] is None:
-                return i
-        return None
+        return 0
 
     def __str__(self):
         string = ""
@@ -475,6 +436,7 @@ class Block:
     def remove_car(self, car):
         lane = car.lane
         lane[lane.index(car)] = None
+        self.street.simulator.logger.log_move_car(car)
         self.street.simulator.logger.log_car_exit(car)
 
 
