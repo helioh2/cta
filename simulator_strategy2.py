@@ -21,7 +21,6 @@ DIR_VER = 1
 RED = 0
 GREEN = 1
 YELLOW = 2
-TIMES = [47, 38, 5]
 
 SEP = "|"
 LOGNAME = "simulator.txt"
@@ -82,13 +81,13 @@ class Logger:
         s += str(ver) + SEP
         tfs = intersection.semaphore.traffic_lights
         timer = intersection.semaphore.timer
-        if tfs[0] == RED and tfs[1] == RED and 1 + 38 + 5 <= timer < 47:
+        if tfs[0] == RED and tfs[1] == RED and timer[0] < timer[1]:
             pos = 0
         elif tfs[0] == GREEN and tfs[1] == RED:
             pos = 1
         elif tfs[0] == YELLOW and tfs[1] == RED:
             pos = 2
-        elif tfs[0] == RED and tfs[1] == RED and timer == 0:
+        elif tfs[0] == RED and tfs[1] == RED and timer[1] < timer[0]:
             pos = 3
         elif tfs[0] == RED and tfs[1] == GREEN:
             pos = 4
@@ -104,7 +103,7 @@ class Logger:
 
 class Clock:
     def __init__(self, simulator):
-        for _ in range(100):
+        for _ in range(1000):
             simulator.tick()
 
 
@@ -199,9 +198,11 @@ class Simulator:
                         if car is not None and car not in moved:
                             if not car.move():
                                 try_later.append(car)
+                            else:
+                                moved.append(car)
 
         for car in try_later:
-            car.move()
+            print(car.move())
 
 
         for street in self.horizontal_streets + self.vertical_streets:
@@ -209,7 +210,7 @@ class Simulator:
                 street.new_car(street.entry_block.first_lane_available())
 
         self.timer += 1
-        print(self)
+        #print(self)
 
 
 class FullLaneException(Exception):
@@ -221,7 +222,8 @@ class Semaphore:
         self.traffic_lights = [RED, RED]
         #self.yellow_time = [47 + 38, 1 + 38]
         self.intersection = intersection
-        self.timer = [47, 1]
+        self.timer = [47, 0]
+        self.times =  [47, 38, 5]
 
     def next_tf(self, tf):
         return (tf + 1) % 3
@@ -231,22 +233,42 @@ class Semaphore:
 
         for i in range(2):
             if self.timer[i] < 0:
-                self.traffic_lights[i] = self.next_tf(self.traffic_lights[0])
-                self.timer[i] = TIMES[self.traffic_lights[i]]
+                self.traffic_lights[i] = self.next_tf(self.traffic_lights[i])
+                self.timer[i] = self.times[self.traffic_lights[i]]
+
+                if self.intersection.id == (3, 12):
+                    print("---- Switch Normal----")
+                    print("-----------")
+                self.intersection.simulator.logger.log_semaphore(self.intersection)
 
         for i in range(2):
             if self.traffic_lights[i] == RED \
                     and self.intersection.entry_blocks[i].congestioned() \
-                    and self.timer[i] >= 47-24:
+                    and self.timer[i] >= 47-24 and self.timer[(i+1)%2] >= 16:
+                prev_time = self.timer[i]
                 self.timer[i] = 47-30
+                delta = prev_time - self.timer[i]
+                self.timer[(i+1)%2] -= delta
+
+                if self.intersection.id == (3, 12):
+                    print("------Stratetegy 2 - RUle 1-------")
+                    print("--------------")
 
         for i in range(2):
             if self.traffic_lights[i] == RED \
                     and self.intersection.entry_blocks[i].congestioned() \
                     and 25 <= self.timer[i] <= 39:
                 self.traffic_lights[(i+1)%2] = YELLOW
-                self.timer[(i+1)%2] = TIMES[YELLOW]
+                self.timer[(i+1)%2] = self.times[YELLOW]
                 self.timer[i] = 6
+
+                if self.intersection.id == (3, 12):
+                    print("-------Stratetegy 2 - RUle 2---------")
+
+                    print("--------------")
+                self.intersection.simulator.logger.log_semaphore(self.intersection)
+        if self.intersection.id == (3, 12):
+            print(self.intersection.id, self.timer, self.traffic_lights)
 
 
 
@@ -300,7 +322,7 @@ class Intersection:
 
         return traffic_light == RED or \
                (traffic_light == YELLOW and \
-                self.semaphore.timer[dir_semaphore] < TIMES[YELLOW] - 2)
+                self.semaphore.timer[dir_semaphore] < self.semaphore.times[YELLOW] - 2)
 
     def tick(self):
         self.semaphore.tick()
@@ -451,16 +473,15 @@ class Block:
     def remove_car(self, car):
         lane = car.lane
         lane[lane.index(car)] = None
-        self.street.simulator.logger.log_move_car(car)
+        # self.street.simulator.logger.log_move_car(car)
         self.street.simulator.logger.log_car_exit(car)
 
     def congestioned(self):
         count_cars = 0
         for car in self.lanes[0]:
-            if car is not None:
+            if car is not None and car.stopped:
                 count_cars += 1
-        return count_cars >= CONGESTION_LEVEL \
-                and all(car.stopped for car in self.lanes[0] if car is not None)
+        return count_cars >= CONGESTION_LEVEL
 
 class Street:
     def __init__(self, simulator, count_blocks, direction, count_lanes):
