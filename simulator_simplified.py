@@ -24,7 +24,6 @@ YELLOW = 2
 SEP = "|"
 LOGNAME = "simulator.txt"
 
-
 class Logger:
     def __init__(self, filename):
         self.file = open(filename, "w")
@@ -201,15 +200,13 @@ class Simulator:
         for car in try_later:
             car.move()
 
-
         for street in self.horizontal_streets + self.vertical_streets:
             if self.timer % 10 == 0:
-                street.new_car(street.entry_block.first_lane_available())
+                street.new_car(street.entry_block.lane)
 
         self.try_add_cars_from_buffer(0)
 
         self.timer += 1
-        print(self)
 
     def try_add_cars_from_buffer(self, lane):
         to_remove = []
@@ -246,10 +243,6 @@ class Semaphore:
                 changed = True
                 self.traffic_lights[i] = self.next_tf(self.traffic_lights[i])
                 self.timer[i] = self.times[self.traffic_lights[i]]
-
-                if self.intersection.id == (3, 12):
-                    print("---- Switch Normal----")
-                    print("-----------")
 
         if changed:
             self.intersection.simulator.logger.log_semaphore(self.intersection)
@@ -359,10 +352,6 @@ class Car:
 
         intersection = self.block.next_intersection
         next_block = intersection.exit_blocks[self.street.direction]
-        # try:
-        #     self.block.add_car(self, 0)
-        # except FullLaneException as e:
-        #     print(e)
         if next_block.add_car(self):
             self.block = next_block
             self.in_intersection = False
@@ -372,16 +361,12 @@ class Car:
         else:
             return False
 
-
-        # verificar possibilidade de colisao
-
-
     def move(self):
         if self.is_leaving_block() and not self.in_intersection:
             intersection = self.block.next_intersection
             if intersection is not None:
                 if not intersection.closed(self):
-                    if random() <= TURN_RATE:  # and intersection.is_possible_to_turn(self):
+                    if random() <= TURN_RATE:
                         return self.move_forward_into_intersection(True)
                     else:
                         return self.move_forward_into_intersection()
@@ -404,7 +389,7 @@ class Car:
 
 
 class Block:
-    def __init__(self, street, length, lanes_count):
+    def __init__(self, street, length):
 
         self.__id = (street.id, next(street.gen_block_id))
         self.street = street
@@ -418,8 +403,7 @@ class Block:
         return self.__id
 
     def add_car(self, car):
-        if self.lane[0] != None:
-            # raise FullLaneException("_lane " + str(lane_id) + " is full.")
+        if self.lane[0] is not None:
             return False
         self.lane[0] = car
         car.block = self
@@ -427,12 +411,8 @@ class Block:
         self.street.simulator.count_cars += 1
         return True
 
-    def first_lane_available(self):
-        return 0
-
     def __str__(self):
         string = ""
-
         string += "|L:" + str(self.lane) + "L|"
         return str(self.previous_intersection) + " ||B:" + str(self.id) + " " + string + "B|| " + str(
             self.next_intersection)
@@ -449,7 +429,6 @@ class Block:
                 return False
         return True
 
-
 class Street:
     def __init__(self, simulator, count_blocks, direction, count_lanes):
 
@@ -458,7 +437,6 @@ class Street:
         self.count_lanes = count_lanes
         self.gen_block_id = (i for i in range(self.count_blocks))
         self.__id = next(self.simulator.gen_street_id)
-        #         self.direction = direction
         self.direction = direction
         direc = DIRECTIONS[self.direction]
 
@@ -478,7 +456,7 @@ class Street:
 
         self.sense = (calcSense(direc[0], self.__id), calcSense(direc[1], self.__id))
 
-        self.blocks = [Block(self, BLOCK_LENGTH, count_lanes) for _ in range(count_blocks)]
+        self.blocks = [Block(self, BLOCK_LENGTH) for _ in range(count_blocks)]
         self.entry_block = self.blocks[0] \
             if self.sense == (1, 0) or self.sense == (0, 1)  else self.blocks[-1]
         self.exit_block = self.blocks[-1] \
@@ -506,11 +484,10 @@ class Street:
 
 def __main__():
     simulator = Simulator()
-    print(simulator)
+    #print(simulator)
     import time
     t_start = time.time()
     clock = Clock(simulator)
     print("Tempo de simulação com 1000 iteração: ",time.time() - t_start)
-
 
 __main__()

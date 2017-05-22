@@ -41,7 +41,9 @@ class Logger:
         s += str(LANES_COUNT) + SEP
         s += str(0) + SEP
         s += str(0) + SEP
+        s += str(1) + SEP
         s += str(1)
+
         self.writeline(s)
 
     def log_new_car(self, car):
