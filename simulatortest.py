@@ -4,7 +4,7 @@ Created on 20 de abr de 2017
 @author: helio
 '''
 import unittest
-from simulator import *
+from simulator_simplified import *
 
 
 class Test(unittest.TestCase):
@@ -27,22 +27,22 @@ class Test(unittest.TestCase):
         for pos in pos_ins:
             self.assertFalse(intersection.out_of_crossing(pos))
 
-    def test_corner(self):
-        intersection = self.simulator.horizontal_streets[0].entry_block.next_intersection
-
-        street_ltor = self.simulator.horizontal_streets[0]
-        street_utod = self.simulator.vertical_streets[0]
-        street_rtol = self.simulator.horizontal_streets[1]
-        street_dtou = self.simulator.vertical_streets[1]
-        corner_ltor_utod = (street_ltor.count_lanes - 1, 0)
-        corner_ltor_dtou = (0, 0)
-        corner_rtol_utod = (street_rtol.count_lanes - 1, street_utod.count_lanes - 1)
-        corner_rtol_dtou = (0, street_dtou.count_lanes - 1)
-
-        self.assertEqual(intersection.corner(street_ltor, street_utod), street_ltor.count_lanes - 1)
-        self.assertEqual(intersection.corner(street_ltor, street_dtou), 0)
-        self.assertEqual(intersection.corner(street_rtol, street_utod), 0)
-        self.assertEqual(intersection.corner(street_rtol, street_dtou), street_rtol.count_lanes - 1)
+    # def test_corner(self):
+    #     intersection = self.simulator.horizontal_streets[0].entry_block.next_intersection
+    #
+    #     street_ltor = self.simulator.horizontal_streets[0]
+    #     street_utod = self.simulator.vertical_streets[0]
+    #     street_rtol = self.simulator.horizontal_streets[1]
+    #     street_dtou = self.simulator.vertical_streets[1]
+    #     corner_ltor_utod = (street_ltor.count_lanes - 1, 0)
+    #     corner_ltor_dtou = (0, 0)
+    #     corner_rtol_utod = (street_rtol.count_lanes - 1, street_utod.count_lanes - 1)
+    #     corner_rtol_dtou = (0, street_dtou.count_lanes - 1)
+    #
+    #     self.assertEqual(intersection.corner(street_ltor, street_utod), street_ltor.count_lanes - 1)
+    #     self.assertEqual(intersection.corner(street_ltor, street_dtou), 0)
+    #     self.assertEqual(intersection.corner(street_rtol, street_utod), 0)
+    #     self.assertEqual(intersection.corner(street_rtol, street_dtou), street_rtol.count_lanes - 1)
 
     def test_is_possible_to_turn(self):
 
@@ -112,10 +112,7 @@ class Test(unittest.TestCase):
             car.move_forward()
         car.move_forward_into_intersection()
         car.move_forward_in_intersection()
-        self.assertIsNone(intersection.crossing[0][0])
-        self.assertEqual(intersection.crossing[0][1], car)
-        car.move_forward_in_intersection()
-        self.assertIsNone(intersection.crossing[0][1])
+        self.assertIsNone(intersection.crossing)
         exit_block = intersection.exit_blocks[DIR_HOR]
         self.assertEqual(exit_block.lanes[0][0], car)
 
@@ -139,12 +136,12 @@ class Test(unittest.TestCase):
         exit_block = intersection.exit_blocks[DIR_VER]
         self.assertEqual(exit_block.lanes[0][0], car)
 
-    def test_first_lane_available(self):
-        street = self.simulator.horizontal_streets[0]
-        block = street.blocks[0]
-        self.assertEqual(block.first_lane_available(),0)
-        street.new_car(0)
-        self.assertEqual(block.first_lane_available(), 1)
+    # def test_first_lane_available(self):
+    #     street = self.simulator.horizontal_streets[0]
+    #     block = street.blocks[0]
+    #     self.assertEqual(block.first_lane_available(),0)
+    #     street.new_car(0)
+    #     self.assertEqual(block.first_lane_available(), 1)
 
     def test_closed(self):
         street1 = self.simulator.horizontal_streets[0]

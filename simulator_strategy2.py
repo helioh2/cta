@@ -77,8 +77,8 @@ class Logger:
         s = "SEMAPHORE" + SEP
         hor = intersection.h_street.id
         ver = intersection.v_street.id - 10
-        s += str(hor) + SEP
         s += str(ver) + SEP
+        s += str(hor) + SEP
         tfs = intersection.semaphore.traffic_lights
         timer = intersection.semaphore.timer
         if tfs[0] == RED and tfs[1] == RED and timer[0] < timer[1]:
@@ -105,6 +105,7 @@ class Clock:
     def __init__(self, simulator):
         for _ in range(1000):
             simulator.tick()
+        simulator.logger.close()
 
 
 class Simulator:
@@ -123,6 +124,8 @@ class Simulator:
 
         self.timer = 0
         self.logger = Logger(LOGNAME)
+
+        self.buffer = []
 
         self.horizontal_streets = []
         self.vertical_streets = []
@@ -193,34 +196,39 @@ class Simulator:
 
         for street in list(reversed(self.horizontal_streets)) + list(reversed(self.vertical_streets)):
             for block in street.blocks:
-                for lane in block.lanes:
-                    for car in reversed(lane):
-                        if car is not None and car not in moved:
-                            if not car.move():
-                                try_later.append(car)
-                            else:
-                                moved.append(car)
+                for car in reversed(block.lane):
+                    if car is not None and car not in moved:
+                        if not car.move():
+                            try_later.append(car)
+                        else:
+                            moved.append(car)
 
         for car in try_later:
             print(car.move())
 
-
-        for street in self.horizontal_streets + self.vertical_streets:
-            if self.timer % 10 == 0:
+        if self.timer % 10 == 0:
+            for street in self.horizontal_streets + self.vertical_streets:
                 street.new_car(street.entry_block.first_lane_available())
+
+        self.try_add_cars_from_buffer(0)
 
         self.timer += 1
         #print(self)
 
-
-class FullLaneException(Exception):
-    pass
+    def try_add_cars_from_buffer(self, lane):
+        to_remove = []
+        for b,c in self.buffer:
+            if not b.is_full:
+                b.add_car(c,lane)
+                to_remove.append((b,c))
+                self.logger.log_new_car(c)
+        for x in to_remove:
+            self.buffer.remove(x)
 
 
 class Semaphore:
     def __init__(self, intersection):
         self.traffic_lights = [RED, RED]
-        #self.yellow_time = [47 + 38, 1 + 38]
         self.intersection = intersection
         self.timer = [47, 0]
         self.times =  [47, 38, 5]
@@ -231,45 +239,48 @@ class Semaphore:
     def tick(self):
         self.timer = [self.timer[0]-1, self.timer[1]-1]
 
+        changed = False
         for i in range(2):
             if self.timer[i] < 0:
+                changed = True
                 self.traffic_lights[i] = self.next_tf(self.traffic_lights[i])
                 self.timer[i] = self.times[self.traffic_lights[i]]
 
-                if self.intersection.id == (3, 12):
-                    print("---- Switch Normal----")
-                    print("-----------")
-                self.intersection.simulator.logger.log_semaphore(self.intersection)
+        print("!!--------")
+        print(self.intersection.id)
+        print(self.intersection.entry_blocks[0].id)
+        print(self.intersection.entry_blocks[1].id)
+        print(self.timer)
+        print(self.intersection.entry_blocks[0].congestioned())
+        print(self.intersection.entry_blocks[0].congestioned())
+        print("--------!!")
 
+        if self.intersection.id == (2,10):
+            print("para")
         for i in range(2):
+
             if self.traffic_lights[i] == RED \
                     and self.intersection.entry_blocks[i].congestioned() \
-                    and self.timer[i] >= 47-24 and self.timer[(i+1)%2] >= 16:
+                    and self.timer[i] >= 47-24: #and self.timer[(i+1)%2] >= 16:
                 prev_time = self.timer[i]
                 self.timer[i] = 47-30
                 delta = prev_time - self.timer[i]
                 self.timer[(i+1)%2] -= delta
 
-                if self.intersection.id == (3, 12):
-                    print("------Stratetegy 2 - RUle 1-------")
-                    print("--------------")
-
         for i in range(2):
             if self.traffic_lights[i] == RED \
                     and self.intersection.entry_blocks[i].congestioned() \
-                    and 25 <= self.timer[i] <= 39:
+                    and 47-39 <= self.timer[i] <= 47-25:
+                changed = True
                 self.traffic_lights[(i+1)%2] = YELLOW
                 self.timer[(i+1)%2] = self.times[YELLOW]
                 self.timer[i] = 6
 
-                if self.intersection.id == (3, 12):
-                    print("-------Stratetegy 2 - RUle 2---------")
-
-                    print("--------------")
-                self.intersection.simulator.logger.log_semaphore(self.intersection)
         if self.intersection.id == (3, 12):
             print(self.intersection.id, self.timer, self.traffic_lights)
 
+        if changed:
+            self.intersection.simulator.logger.log_semaphore(self.intersection)
 
 
 
@@ -304,7 +315,7 @@ class Intersection:
         return self.__id
 
     def __str__(self):
-        return "|I" + str(self.crossing) + "I|"
+        return "|I" + str(self.id) + "I|"
 
 
     def crossing_block_and_street(self, street):
@@ -440,7 +451,7 @@ class Block:
         self.street = street
         self.length = length
         self.lanes_count = lanes_count
-        self.lanes = [[None] * length for _ in range(lanes_count)]
+        self.lane = [None] * length
         self.next_intersection = None
         self.previous_intersection = None
 
@@ -449,13 +460,13 @@ class Block:
         return self.__id
 
     def add_car(self, car, lane_id):
-        if lane_id is None or self.lanes[lane_id][0] is not None:
+        if self.lane[0] is not None:
             # raise FullLaneException("_lane " + str(lane_id) + " is full.")
             return False
-        self.lanes[lane_id][0] = car
+        self.lane[0] = car
         car.block = self
         car.street = self.street
-        car.lane = self.lanes[lane_id]
+        car.lane = self.lane
         car.lane_id = lane_id
         self.street.simulator.count_cars += 1
         return True
@@ -465,8 +476,8 @@ class Block:
 
     def __str__(self):
         string = ""
-        for lane in self.lanes:
-            string += "|L:" + str(lane) + "L|"
+
+        string += "|L:" + str(self.lane) + "L|"
         return str(self.previous_intersection) + " ||B:" + str(self.id) + " " + string + "B|| " + str(
             self.next_intersection)
 
@@ -478,10 +489,16 @@ class Block:
 
     def congestioned(self):
         count_cars = 0
-        for car in self.lanes[0]:
+        for car in self.lane:
             if car is not None and car.stopped:
                 count_cars += 1
         return count_cars >= CONGESTION_LEVEL
+
+    def is_full(self):
+        for car in self.lane:
+            if car is None:
+                return False
+        return True
 
 class Street:
     def __init__(self, simulator, count_blocks, direction, count_lanes):
@@ -523,13 +540,15 @@ class Street:
 
     def new_car(self, lane):
         car = Car(self)
-        try:
+        if self.entry_block.is_full():
+            self.simulator.buffer.append((self.entry_block, car))
+        else:
             self.entry_block.add_car(car, lane)
             self.simulator.logger.log_new_car(car)
-            return car
-        except FullLaneException as e:
-            print(e)
-            ## _put on log
+        return car
+
+
+
 
     def __str__(self):
         string = ""
