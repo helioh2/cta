@@ -205,11 +205,15 @@ class Simulator:
                         else:
                             moved.append(car)
 
+        for k in range(2):
+            to_remove = []
+            for car in try_later:
+                if car.move():
+                    to_remove.append(car)
+            for c in to_remove:
+                try_later.remove(c)
         for car in try_later:
-            prev_total_time = car.total_time_in_sim
-            car.move()
-            if prev_total_time == car.total_time_in_sim:
-                car.total_time_in_sim += 1
+            car.total_time_in_sim += 1
 
         if self.timer % 10 == 0:
             for street in self.horizontal_streets + self.vertical_streets:
@@ -361,6 +365,17 @@ class Car:
 
         intersection = self.block.next_intersection
         if intersection.crossing is not None:
+            self.stopped = True
+            return False
+
+        if intersection.crossing is None and \
+                turn and intersection.exit_blocks[(self.street.direction + 1) % 2].lane[0] is not None \
+                and intersection.exit_blocks[(self.street.direction + 1) % 2].lane[0].stopped:
+            self.stopped = True
+            return False
+        if intersection.crossing is None and not turn and \
+                        intersection.exit_blocks[self.street.direction].lane[0] is not None and \
+                intersection.exit_blocks[self.street.direction].lane[0].stopped:
             self.stopped = True
             return False
 

@@ -199,11 +199,15 @@ class Simulator:
                             if not car.move():
                                 try_later.append(car)
 
+        for k in range(2):
+            to_remove = []
+            for car in try_later:
+                if car.move():
+                    to_remove.append(car)
+            for c in to_remove:
+                try_later.remove(c)
         for car in try_later:
-            prev_total_time = car.total_time_in_sim
-            car.move()
-            if prev_total_time == car.total_time_in_sim:
-                car.total_time_in_sim += 1
+            car.total_time_in_sim += 1
 
         for street in self.horizontal_streets + self.vertical_streets:
             if self.timer % 10 == 0:
@@ -317,6 +321,7 @@ class Car:
         self.block = None
         self.in_intersection = False
         self.turning = False
+        self.stopped = False
 
     @property
     def id(self):
@@ -329,13 +334,26 @@ class Car:
             lane[i], lane[i + 1] = lane[i + 1], lane[i]
             self.simulator.logger.log_move_car(self)
             self.total_time_in_sim += 1
+            self.stopped = False
             return True
+        self.stopped = True
         return False
 
     def move_forward_into_intersection(self, turn=False):
 
         intersection = self.block.next_intersection
         if intersection.crossing is not None:
+            self.stopped = True
+            return False
+        if intersection.crossing is None and \
+                turn and intersection.exit_blocks[(self.street.direction + 1)%2].lane[0] is not None\
+                and intersection.exit_blocks[(self.street.direction + 1)%2].lane[0].stopped:
+            self.stopped = True
+            return False
+        if intersection.crossing is None and not turn and \
+                        intersection.exit_blocks[self.street.direction].lane[0] is not None and \
+                        intersection.exit_blocks[self.street.direction].lane[0].stopped:
+            self.stopped = True
             return False
 
         intersection.crossing = self
@@ -350,6 +368,7 @@ class Car:
         else:
             self.simulator.logger.log_move_car(self, False)
         self.total_time_in_sim += 1
+        self.stopped = False
         return True
 
         # return False
@@ -364,8 +383,10 @@ class Car:
             intersection.crossing = None
             self.simulator.logger.log_move_car(self)
             self.total_time_in_sim += 1
+            self.stopped = False
             return True
         else:
+            self.stopped = True
             return False
 
     def move(self):
@@ -379,7 +400,9 @@ class Car:
                     else:
                         return self.move_forward_into_intersection()
                         # else do nothing
-                else: return True
+                else:
+                    self.stopped = True
+                    return True
             else:
                 self.block.remove_car(self)
                 return True
