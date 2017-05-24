@@ -22,7 +22,9 @@ GREEN = 1
 YELLOW = 2
 
 SEP = "|"
-LOGNAME = "simulator.txt"
+LOGNAME = "simulation-python-cenario1.txt"
+
+CAR_TIMES = []
 
 class Logger:
     def __init__(self, filename):
@@ -198,7 +200,10 @@ class Simulator:
                                 try_later.append(car)
 
         for car in try_later:
+            prev_total_time = car.total_time_in_sim
             car.move()
+            if prev_total_time == car.total_time_in_sim:
+                car.total_time_in_sim += 1
 
         for street in self.horizontal_streets + self.vertical_streets:
             if self.timer % 10 == 0:
@@ -308,7 +313,7 @@ class Car:
         self.street = street
         self.simulator = self.street.simulator
         self.__id = next(self.simulator.gen_car_id)
-        self.total_time_in_sim = 0
+        self.total_time_in_sim = 1
         self.block = None
         self.in_intersection = False
         self.turning = False
@@ -323,6 +328,7 @@ class Car:
         if lane[i + 1] is None:
             lane[i], lane[i + 1] = lane[i + 1], lane[i]
             self.simulator.logger.log_move_car(self)
+            self.total_time_in_sim += 1
             return True
         return False
 
@@ -343,7 +349,7 @@ class Car:
 
         else:
             self.simulator.logger.log_move_car(self, False)
-
+        self.total_time_in_sim += 1
         return True
 
         # return False
@@ -357,11 +363,13 @@ class Car:
             self.in_intersection = False
             intersection.crossing = None
             self.simulator.logger.log_move_car(self)
+            self.total_time_in_sim += 1
             return True
         else:
             return False
 
     def move(self):
+
         if self.is_leaving_block() and not self.in_intersection:
             intersection = self.block.next_intersection
             if intersection is not None:
@@ -422,6 +430,7 @@ class Block:
         lane[lane.index(car)] = None
         self.street.simulator.logger.log_move_car(car)
         self.street.simulator.logger.log_car_exit(car)
+        CAR_TIMES.append(car.total_time_in_sim)
 
     def is_full(self):
         for car in self.lane:
@@ -489,5 +498,6 @@ def __main__():
     t_start = time.time()
     clock = Clock(simulator)
     print("Tempo de simulação com 1000 iteração: ",time.time() - t_start)
+    print("Media de tempo dos carros no simulador: ",sum(CAR_TIMES)/len(CAR_TIMES))
 
 __main__()

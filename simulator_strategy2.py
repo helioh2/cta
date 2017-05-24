@@ -23,8 +23,8 @@ GREEN = 1
 YELLOW = 2
 
 SEP = "|"
-LOGNAME = "simulator.txt"
-
+LOGNAME = "simulation-python-cenario2.txt"
+CAR_TIMES = []
 
 class Logger:
     def __init__(self, filename):
@@ -206,7 +206,10 @@ class Simulator:
                             moved.append(car)
 
         for car in try_later:
-            print(car.move())
+            prev_total_time = car.total_time_in_sim
+            car.move()
+            if prev_total_time == car.total_time_in_sim:
+                car.total_time_in_sim += 1
 
         if self.timer % 10 == 0:
             for street in self.horizontal_streets + self.vertical_streets:
@@ -248,19 +251,7 @@ class Semaphore:
                 self.traffic_lights[i] = self.next_tf(self.traffic_lights[i])
                 self.timer[i] = self.times[self.traffic_lights[i]]
 
-        print("!!--------")
-        print(self.intersection.id)
-        print(self.intersection.entry_blocks[0].id)
-        print(self.intersection.entry_blocks[1].id)
-        print(self.timer)
-        print(self.intersection.entry_blocks[0].congestioned())
-        print(self.intersection.entry_blocks[0].congestioned())
-        print("--------!!")
-
-        if self.intersection.id == (2,10):
-            print("para")
         for i in range(2):
-
             if self.traffic_lights[i] == RED \
                     and self.intersection.entry_blocks[i].congestioned() \
                     and self.timer[i] >= 47-24: #and self.timer[(i+1)%2] >= 16:
@@ -277,9 +268,6 @@ class Semaphore:
                 self.traffic_lights[(i+1)%2] = YELLOW
                 self.timer[(i+1)%2] = self.times[YELLOW]
                 self.timer[i] = 6
-
-        if self.intersection.id == (3, 12):
-            print(self.intersection.id, self.timer, self.traffic_lights)
 
         if changed:
             self.intersection.simulator.logger.log_semaphore(self.intersection)
@@ -346,13 +334,11 @@ class Car:
         self.street = street
         self.simulator = self.street.simulator
         self.__id = next(self.simulator.gen_car_id)
-        self.total_time_in_sim = 0
+        self.total_time_in_sim = 1
         self.block = None
         self.lane = None
-        self.lane_id = None
         self.in_intersection = False
         self.turning = False
-        self.p_crossing = None, None
         self.stopped = False
 
     @property
@@ -366,6 +352,7 @@ class Car:
             self.simulator.logger.log_move_car(self)
             # else do nothing
             self.stopped = False
+            self.total_time_in_sim += 1
             return True
         self.stopped = True
         return False
@@ -390,6 +377,7 @@ class Car:
             self.simulator.logger.log_move_car(self, False)
 
         self.stopped = False
+        self.total_time_in_sim += 1
         return True
 
         # return False
@@ -398,24 +386,17 @@ class Car:
 
         intersection = self.block.next_intersection
         next_block = intersection.exit_blocks[self.street.direction]
-        # try:
-        #     self.block.add_car(self, 0)
-        # except FullLaneException as e:
-        #     print(e)
         if next_block.add_car(self,0):
             self.block = next_block
             self.in_intersection = False
             intersection.crossing = None
             self.simulator.logger.log_move_car(self)
             self.stopped = False
+            self.total_time_in_sim += 1
             return True
         else:
             self.stopped = True
             return False
-
-
-        # verificar possibilidade de colisao
-
 
     def move(self):
         if self.is_leaving_block() and not self.in_intersection:
@@ -488,6 +469,7 @@ class Block:
         lane[lane.index(car)] = None
         # self.street.simulator.logger.log_move_car(car)
         self.street.simulator.logger.log_car_exit(car)
+        CAR_TIMES.append(car.total_time_in_sim)
 
     def congestioned(self):
         count_cars = 0
@@ -549,9 +531,6 @@ class Street:
             self.simulator.logger.log_new_car(car)
         return car
 
-
-
-
     def __str__(self):
         string = ""
         for block in self.blocks:
@@ -561,8 +540,12 @@ class Street:
 
 def __main__():
     simulator = Simulator()
-    print(simulator)
+    # print(simulator)
+    import time
+    t_start = time.time()
     clock = Clock(simulator)
+    print("Tempo de simulação com 1000 iteração: ", time.time() - t_start)
+    print("Media de tempo dos carros no simulador: ", sum(CAR_TIMES) / len(CAR_TIMES))
 
 
 __main__()
